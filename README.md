@@ -17,3 +17,5 @@ Enter the Oracle username and password. Upon successful login, it will take to t
 <img width="744" alt="Screen Shot 2022-07-21 at 10 53 44 AM" src="https://user-images.githubusercontent.com/63495996/180245080-8e2824fb-7261-45b8-8200-931ca7ff67a6.png">
 
 
+For Menu Driven simple code, Run: 
+
