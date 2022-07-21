@@ -1,0 +1,38 @@
+create or replace trigger deleteStudentTrigger
+after delete on students
+for each row
+begin
+delete from enrollments
+where B# = :old.b#;
+insert into logs
+values(log_sequence.nextval, user, sysdate, 'students', 'delete', :old.b#);
+end;
+
+create or replace trigger trigger_when_student_enrolled
+after insert on enrollments
+for each row
+begin
+update classes
+set class_size = class_size + 1
+where classid = :new.classid;
+insert into logs
+values(log_sequence.nextval, user, sysdate, 'g_enrollments', 'insert', :new.B# || ' | ' || :new.classid);
+end;
+
+create or replace  trigger delete_enrl_on_stud_del
+before delete on students
+for each row
+begin
+delete from g_enrollments where g_enrollments.G_B#=:old.B# ;
+end;
+
+create or replace trigger trigger_when_student_dropped
+after delete on g_enrollments
+for each row
+begin
+update classes
+set class_size = class_size - 1
+where classid = :old.classid;
+insert into logs
+values(log_sequence.nextval, user, sysdate, 'g_enrollments', 'delete', :old.B# || ' | ' || :old.classid);
+end;
