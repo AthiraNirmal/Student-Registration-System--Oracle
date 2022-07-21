@@ -1,0 +1,313 @@
+create or replace sequence log_sequence increment by 1 start with 1000;
+
+set serveroutput on
+
+--CREATE PACKAGE WITH NAME project2_procedures--
+create or replace package project2_procedures as
+
+--PROCEDURE TO DISPLAY ALL THE TABLES--
+procedure show_students(students_cursor out sys_refcursor);
+procedure show_courses(courses_cursor out sys_refcursor);
+procedure show_prerequisites(prerequisites_cursor out sys_refcursor);
+procedure show_course_credit(course_credit_cursor out sys_refcursor);
+procedure show_classes(classes_cursor out sys_refcursor);
+procedure show_score_grade(score_grade_credit_cursor out sys_refcursor);
+procedure show_genrollments(genrollments_cursor out sys_refcursor);
+procedure show_logs(logs_cursor out sys_refcursor);
+
+--PROCEDURE FOR CHECKING IF STUDENT IN GIVEN CLASS--
+procedure get_class_details(class_id in classes.classid%type, showmessage out varchar2, class_details out sys_refcursor);
+procedure get_prereq_courses(deptcode in prerequisites.dept_code%type, courseno in prerequisites.course_no%type, course_count in number, result out varchar2);
+procedure enroll_student(bnum in students.B#%type, class_id in classes.classid%type, showmessage out varchar2);
+procedure drop_student(bnum in students.B#%type, class_id in classes.classid%type, showmessage out varchar2);
+procedure delete_student(student_id in students.B#%type, showmessage out varchar2);
+end;
+/
+
+create or replace package body project2_procedures as
+
+---PROCEDURE BODY TO DISPLAY ALL CLASSES--
+procedure show_students(students_cursor out sys_refcursor) as
+begin
+open students_cursor for
+select * from students;
+end show_students;
+
+procedure show_courses(courses_cursor out sys_refcursor) as
+begin
+open courses_cursor for
+select * from courses;
+end show_courses;
+
+procedure show_prerequisites(prerequisites_cursor out sys_refcursor) as
+begin
+open prerequisites_cursor for
+select * from prerequisites;
+end show_prerequisites;
+
+procedure show_course_credit(course_credit_cursor out sys_refcursor); as
+begin
+open course_credit_cursor for
+select * from course_credit;
+end show_course_credit;
+
+procedure show_classes(classes_cursor out sys_refcursor) as
+begin
+open classes_cursor for
+select * from classes;
+end show_classes;
+
+procedure show_score_grade(score_grade_credit_cursor out sys_refcursor) as
+begin
+open score_grade_credit_cursor for
+select * from score_grade;
+end show_score_grade;
+
+procedure show_genrollments(genrollments_cursor out sys_refcursor) as
+begin
+open genrollments_cursor for
+select * from g_enrollments;
+end show_genrollments;
+
+procedure show_logs(logs_cursor out sys_refcursor) as
+begin
+open logs_cursor for
+select * from logs;
+end show_logs;
+
+procedure get_class_details(class_id in classes.classid%type, showmessage out varchar2, class_details out sys_refcursor) is
+check_class_exist int;
+total_student_enrolled int;
+begin
+select count(*) into check_class_exist
+from classes cls
+where class_id = cls.classid;
+if(check_class_exist = 0)
+    then 
+    dbms_output.put_line('Invalid class id');
+    showmessage := 'Invalid class id';
+    return;
+end if;
+select count(*) into total_student_enrolled
+from enrollments enrl
+where class_id = enrl.classid;
+    if(total_student_enrolled = 0)
+        then
+        dbms_output.put_line('empty class');
+        showmessage := 'empty class';
+        return;
+    end if;
+open class_details for
+select cls.classid, crs.title, std.sid, std.lastname, std.email
+from classes cls join g_enrollments enrl
+on cls.classid = class_id and cls.classid = enrl.classid
+join students std
+on enrl.G_B# = std.B#
+join courses crs
+on cls.dept_code = crs.dept_code and cls.course_no = crs.course_no;
+end get_class_details;
+
+procedure get_prereq_courses(deptcode in prerequisites.dept_code%type, courseno in prerequisites.course_no%type, course_count in number, result out varchar2)
+is
+total_direct_prereq_course number;
+course_count_update number;
+cursor direct_prereq is
+select pre_dept_code, pre_course_no
+from prerequisites prereq
+where prereq.dept_code = deptcode and prereq.course_no = courseno;
+indirect_prereq direct_prereq%rowtype;
+begin
+select count(*) into total_direct_prereq_course
+from prerequisites prereq
+where prereq.dept_code = deptcode and prereq.course_no = courseno;
+open direct_prereq;
+fetch direct_prereq into indirect_prereq;
+while(direct_prereq%found) loop
+course_count_update := course_count + 1;
+get_prereq_courses(indirect_prereq.pre_dept_code, indirect_prereq.pre_course_no, course_count_update, result);
+if(result is null)
+then
+result := indirect_prereq.pre_dept_code || indirect_prereq.pre_course_no;
+else
+result := result || ', ' || indirect_prereq.pre_dept_code || indirect_prereq.pre_course_no;
+end if;
+fetch direct_prereq into indirect_prereq;
+end loop;
+if(total_direct_prereq_course = 0 and course_count = 0)
+then
+result := 'no prerequisite';
+end if;
+end get_prereq_courses;
+
+procedure enroll_student(bnum in students.B#%type, class_id in classes.classid%type, showmessage out varchar2) is
+check_student_exist int; 
+check_class_exist int; 
+check_classsize int;
+check_student_already_enrolled int;
+total_class_enrolled int;
+deptcode varchar2(4);
+courseno number(3);
+prereq_courses varchar2(100);
+prereq_courses_incomp_count int;
+begin 
+select count(*) into check_student_exist
+from students stud
+where student_id = stud.b#;
+if check_student_exist = 0 
+then
+showmessage := 'Invalid B#.';
+dbms_output.put_line('Invalid B#.');
+return;
+end if;
+select count(*) into check_class_exist
+from classes cls
+where class_id = cls.classid;
+if check_class_exist = 0 
+then
+showmessage := 'Invalid classid';
+dbms_output.put_line('Invalid classid');
+return;
+end if;
+select count(*) into check_classsize
+from classes cls
+where class_id = cls.classid and cls.class_size + 1 > cls.limit;
+if check_classsize > 0 
+then
+showmessage := 'Class full';
+dbms_output.put_line('Class full');
+return;
+end if;
+select count(*) into check_student_already_enrolled
+from enrollments enrl
+where student_id = enrl.G_B# and class_id = enrl.classid;
+if check_student_already_enrolled > 0 
+then
+showmessage := 'Student already in this class';
+dbms_output.put_line('Student already in this class');
+return;
+end if;
+select count(*) into total_class_enrolled
+from g_enrollments enrl
+where student_id = enrl.G_B#;
+if total_class_enrolled >= 5 
+then
+showmessage := 'overloaded!';
+dbms_output.put_line('overloaded!');
+return;
+end if;
+select dept_code, course_no into deptcode, courseno
+from classes cls
+where class_id = cls.classid;
+get_prereq_courses(deptcode, courseno, 0, prereq_courses);
+select count(*) into prereq_courses_incomp_count
+from g_enrollments enrl, classes cls
+where student_id = enrl.G_B# and cls.classid = enrl.classid and instr(prereq_courses, cls.dept_code || cls.course_no) != 0 and enrl.lgrade not in ('A+','A','A-','B+','B','B-','C+');
+if prereq_courses_incomp_count > 0 
+then
+showmessage := 'prerequisite courses have not been completed.';
+dbms_output.put_line('prerequisite courses have not been completed.');
+return;
+end if;
+insert into enrollments
+values (student_id, class_id, null);
+commit;
+showmessage := 'Succesfully enrolled';
+dbms_output.put_line('Succesfully enrolled');
+end enroll_student;
+
+procedure drop_student(bnum in students.B#%type, class_id in classes.classid%type, showmessage out varchar2) is
+check_student_exist int; 
+check_class_exist int; 
+check_student_enrolled int;
+deptcode classes.dept_code%type;
+courseno classes.course_no%type;
+prereq_violation int;
+classes_enrolled int;
+total_class_students int;
+begin 
+select count(*) into check_student_exist
+from students stud
+where student_id = stud.B#;
+if(check_student_exist = 0)
+then
+showmessage := 'invalid B#';
+dbms_output.put_line('invalid B#');
+return;
+end if;
+select count(*) into check_class_exist
+from classes cls
+where class_id = cls.classid;
+if(check_class_exist = 0)
+then
+showmessage := 'invalid classid.';
+dbms_output.put_line('invalid classid.');
+return;
+end if;
+select count(*) into check_student_enrolled
+from g_enrollments enrl
+where student_id = enrl.G_B# and class_id = enrl.classid;
+if(check_student_enrolled = 0)
+then
+showmessage := 'student not enrolled.';
+dbms_output.put_line('student not enrolled.');
+return;
+end if;
+select dept_code, course_no into deptcode, courseno
+from classes cls
+where class_id = cls.classid;
+select count(*) into prereq_violation
+from classes cls, prerequisites pre_req
+where cls.classid in (select classid from g_enrollments enrl where class_id != enrl.classid and student_id = enrl.g_B#) and cls.dept_code = pre_req.dept_code and cls.course_no = pre_req.course_no and pre_req.pre_dept_code = deptcode and pre_req.pre_course_no = courseno;
+select count(*) into classes_enrolled
+from g_enrollments enrl
+where student_id = enrl.G_B#;
+select class_size into total_class_students
+from classes cls
+where class_id = cls.classid;
+if(prereq_violation > 0)
+then
+showmessage := 'drop request rejected due to prerequisite requirements.';
+dbms_output.put_line('drop request rejected due to prerequisite requirements.');
+elsif(classes_enrolled - 1 = 0)
+then
+showmessage := 'drop request rejected; must be enrolled in at least one class.';
+dbms_output.put_line('drop request rejected; must be enrolled in at least one class.');
+elsif(total_class_students - 1 = 0)
+then
+showmessage := 'no student in this class.';
+dbms_output.put_line('no student in this class.');
+delete from enrollments enrl
+where enrl.G_B# = student_id and enrl.classid = class_id;
+else
+delete from enrollments enrl
+where enrl.G_B# = student_id and enrl.classid = class_id;
+showmessage := 'student dropped from class successfully';
+dbms_output.put_line('student dropped from class successfully');
+end if;
+commit;
+end drop_student;
+
+procedure delete_student(student_id in students.B#%type, showmessage out varchar2) is
+check_student_exist int;
+student_enrolled int;
+begin
+select count(*) into check_student_exist
+from students std
+where student_id = std.B#;
+if(check_student_exist = 0)
+then
+dbms_output.put_line('B# not found');
+showmessage := 'B# not found';
+--return return_value + 1;
+return;
+end if;
+delete from students std
+where std.B# = student_id;
+commit;
+dbms_output.put_line('Student Deleted Successfully!!');
+showmessage := 'Student Deleted Successfully!!';
+--return return_value;
+end delete_student;
+
+end project2_procedures;
+/
