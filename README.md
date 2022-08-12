@@ -19,4 +19,4 @@ Enter the Oracle username and password. Upon successful login, it will take to t
 
 For Menu Driven simple code, Run: menu_driven_code.java
 
-This project is done in collaboration with : Pradeep Kumar Ramesh (@PradeepGITT)
+This project is done in collaboration with : Pradeep Kumar Ramesh (@PradeepKumarRamesh)
